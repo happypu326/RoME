@@ -93,7 +93,7 @@ python train.py \
   --num_epochs 150
 ```
 
-We upload the pretrained model on the IS, IP and SC using the following parameter settings into the `pretrain_models` folder.
+We upload the pretrained model on the IS, IP and SC using the above parameter settings into the `pretrain_models` folder.
 
 ### 4. Test
 
@@ -132,4 +132,5 @@ If you find RoME useful or relevant to your research, please consider citing our
   url={}
 }
 ```
+
 
