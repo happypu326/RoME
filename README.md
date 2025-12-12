@@ -64,6 +64,8 @@ We use [Ecole](https://www.ecole.ai/) library to generate Independent Set (IS), 
 
 For each benchmarks, we generate 300 instances for training and 100 instances for testing. We take SC for example, after generating the instances, place them in the `instance` directory following this structure: `instance/train/SC` and `instance/test/SC`.
 
+We’ve uploaded our data used in the conference version to Hugging Face, which you can access here: https://huggingface.co/datasets/tianle326/L2O-MILP.
+
 Note: we also collect more synthetic datasets for training in the journal version, like Minimum Vertex Cover, Multiple Knapsack, Bin Packing, Capacitated Facility Location, Generalized Independent Set and so on.
 
 ### 2. Preprocessing
@@ -132,5 +134,6 @@ If you find RoME useful or relevant to your research, please consider citing our
   url={}
 }
 ```
+
 
 
