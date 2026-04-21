@@ -1,19 +1,25 @@
 import numpy as np
 import pyscipopt as scp
 import torch
+
 import gurobipy as gp
 from gurobipy import GRB
 from collections import Counter
 
+
 device=torch.device("cpu")
-TASKS = ["IP", "WA", "IS", "CA", "MVC", "SC", "MIPLIB"]
+
+TASKS = ["IP", "WA", "MIS", "CA", "MVC", "SC", "MIPLIB", "BP", "CFLP", "GC", "GISP", "LB", "KS", "MC", "NF", "PF", "GC", "JS", "NNV", "MMCN", "MIRP", "OTS", "SRPN", "IIS"]
  
+
 def position_get_ordered_flt(variable_features):
+    
     lens=variable_features.shape[0]
-    feature_widh=20 #max length 4095
+    feature_widh=20
     sorter=variable_features[:,1]
     position=torch.argsort(sorter)
     position=position/float(lens)
+    
     position_feature=torch.zeros(lens,feature_widh)
     
     for row in range(position.shape[0]):
@@ -23,13 +29,12 @@ def position_get_ordered_flt(variable_features):
             if divider<=flt_indx:
                 position_feature[row][ks]=1
                 flt_indx-=divider
-            divider/=2.0 
-
+            divider/=2.0
     position_feature=position_feature.to(device)
     variable_features=variable_features.to(device)
     v=torch.concat([variable_features,position_feature],dim=1)
-    return v   
-        
+    return v
+    
 def get_BG_from_scip(ins_name):
     
     epsilon=1e-6
@@ -61,7 +66,7 @@ def get_BG_from_scip(ins_name):
             
         v_nodes.append(tp)
     v_map={}
-    
+
     for indx,v in enumerate(mvars):
         v_map[v.name]=indx
 
@@ -89,10 +94,8 @@ def get_BG_from_scip(ins_name):
     cons=new_cons
     ncons=len(cons)
     cons_map=[[x,len(m.getValsLinear(x))] for x in cons]
-
     cons_map=sorted(cons_map,key=lambda x:[x[1],str(x[0])])
     cons=[x[0] for x in cons_map]
-
     A=[]
     for i in range(ncons):
         A.append([])
@@ -141,7 +144,7 @@ def get_BG_from_scip(ins_name):
     clip_min=[0,-1,0]
     
     v_nodes[:,0]=torch.clamp(v_nodes[:,0],clip_min[0],clip_max[0])
-    
+
     maxs=torch.max(v_nodes,0)[0]
     mins=torch.min(v_nodes,0)[0]
     diff=maxs-mins
@@ -152,14 +155,14 @@ def get_BG_from_scip(ins_name):
     v_nodes=v_nodes/diff
     v_nodes=torch.clamp(v_nodes,1e-5,1)
     v_nodes=position_get_ordered_flt(v_nodes)
-    
+
     maxs=torch.max(c_nodes,0)[0]
     mins=torch.min(c_nodes,0)[0]
     diff=maxs-mins
     c_nodes=c_nodes-mins
     c_nodes=c_nodes/diff
     c_nodes=torch.clamp(c_nodes,1e-5,1)
-    
+
     return A,v_map,v_nodes,c_nodes,b_vars       
     
     
@@ -188,7 +191,7 @@ def get_BG_from_GRB(ins_name):
             b_vars.append(i)
             
         v_nodes.append(tp)
-    
+
     obj=m.getObjective()
     obj_cons=[0]*(nvars+2)
     obj_node=[0,0,0,0]
@@ -203,7 +206,7 @@ def get_BG_from_GRB(ins_name):
         obj_node[0]+=v
         obj_node[1]+=1
     obj_node[0]/=obj_node[1]
-    
+
     cons=m.getConstrs()
     ncons=len(cons)
     lcons=ncons
@@ -229,7 +232,7 @@ def get_BG_from_GRB(ins_name):
             sense=1
         elif sense=='=':
             sense=2
-            
+
         tmp_c=[0,0,rhs,sense]
         summation=0
         tmp_v=[0,0,0,0,0]
@@ -271,7 +274,7 @@ def get_BG_from_GRB(ins_name):
     clip_min=[0,-1,0]
     
     v_nodes[:,0]=torch.clamp(v_nodes[:,0],clip_min[0],clip_max[0])
-    
+
     maxs=torch.max(v_nodes,0)[0]
     mins=torch.min(v_nodes,0)[0]
     diff=maxs-mins
@@ -282,14 +285,14 @@ def get_BG_from_GRB(ins_name):
     v_nodes=v_nodes/diff
     v_nodes=torch.clamp(v_nodes,1e-5,1)
     v_nodes=position_get_ordered_flt(v_nodes)
-    
+
     maxs=torch.max(c_nodes,0)[0]
     mins=torch.min(c_nodes,0)[0]
     diff=maxs-mins
     c_nodes=c_nodes-mins
     c_nodes=c_nodes/diff
     c_nodes=torch.clamp(c_nodes,1e-5,1)
-    
+
     return A,v_map,v_nodes,c_nodes,b_vars       
     
 def get_a_new2(ins_name):
@@ -419,7 +422,7 @@ def get_a_new2(ins_name):
     return A, v_map, v_nodes, c_nodes, b_vars
 
 def get_group_stats(group_list, device):
-    counter = Counter(group_list)  
+    counter = Counter(group_list)
     counts = torch.tensor(list(counter.values()), dtype=torch.float32, device=device)
     total = len(group_list)
     return {

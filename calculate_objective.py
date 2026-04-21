@@ -9,6 +9,15 @@ from solver.solver_utils import SOLVER_CLASSES
 
 from utils.utils import TASKS
 
+def get_target_files(file_dir, matched_file_name, file_suffix):
+  target_files = []
+  for entry in os.scandir(file_dir):
+      if entry.is_file():
+        file_name = entry.name
+        if matched_file_name in file_name and file_name.endswith(file_suffix):
+          target_files.append(entry.path)
+  return sorted(target_files)
+
 def get_best_obj_and_time(files):
     obj = 0
     time = 0
@@ -48,15 +57,17 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="MIP Solver with GNN-based Prediction")
     
     exp_group = parser.add_argument_group("Experiment Settings")
-    exp_group.add_argument("--task", type=str, choices=TASKS, default='CA')
+    exp_group.add_argument("--task", type=str, choices=TASKS, default='JS')
     exp_group.add_argument("--fix_strategy", default="pas")
     exp_group.add_argument("--method_type", default='RoME', choices=['RoME', 'PS'],
                        help="Training method type (default: %(default)s)")
-    exp_group.add_argument("--time_flag", type=str, default='20251207_232349')
+    exp_group.add_argument("--time_flag", type=str, default='20260123_105309')
     exp_group.add_argument("--gnn_type", default="moe", choices=["gcn", "moe"],
                            help="GNN architecture type (default: %(default)s)")
-    exp_group.add_argument("--num_shared_experts", type=int, default=1)
-    exp_group.add_argument("--num_dedicate_experts", type=int, default=5)
+    exp_group.add_argument("--num_shared_experts", type=int, default=2)
+    exp_group.add_argument("--num_dedicate_experts", type=int, default=16)
+    exp_group.add_argument("--difficulty",default="hard", help="The difficulty of dataset")
+    exp_group.add_argument("--gurobi_time",default="1000s", help="The time Gurobi takes to process the dataset")
 
     solver_group = parser.add_argument_group("Solver Settings")
     solver_group.add_argument("--solver", choices=SOLVER_CLASSES.keys(), default="gurobi")
@@ -80,7 +91,7 @@ if __name__ == '__main__':
         save_name = f'{args.time_flag}_{args.gnn_type}'
     
     # Build log directory path: test_logs/method_type/task/test/
-    log_dir = os.path.join(args.log_dir, args.method_type, args.task, f"{save_name}")
+    log_dir = os.path.join(args.log_dir, args.method_type, args.solver, args.task, args.difficulty, args.gurobi_time, f"{save_name}")
     
     print(f"Looking for logs in: {log_dir}")
     print(f"Save name pattern: {save_name}")
@@ -94,8 +105,8 @@ if __name__ == '__main__':
     for entry in os.scandir(log_dir):
         if entry.is_file() and entry.name.endswith('.log'):
             # Match log files with specific pattern
-            if save_name in entry.name and 'instance_' in entry.name:
-                log_files.append(entry.path)
+            if entry.name != "test.log":
+                log_files.append(entry.path) 
     
     log_files = sorted(log_files)
 

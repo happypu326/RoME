@@ -1,20 +1,16 @@
-## RoME: Domain-Robust Mixture-of-Experts for MILP Solution Prediction across Domains
+# RoME: Domain-Robust Mixture-of-Experts for MILP Solution Prediction across Domains
 
-This is the code of paper **RoME: Domain-Robust Mixture-of-Experts for MILP Solution Prediction across Domains.** Tianle Pu, Zijie Geng, Haoyang Liu, Shixuan Liu, Jie Wang, Li Zeng, Chao Chen, Changjun Fan. NeurIPS 2025.
+This repository contains the codebase for the **extended journal version** of **RoME: Domain-Robust Mixture-of-Experts for MILP Solution Prediction across Domains** (NeurIPS 2025) .
 
-Paper: https://arxiv.org/abs/2511.02331
+Paper (conference): https://openreview.net/forum?id=VmK7gYaKXl
 
-**Note:** Building upon the conference paper version, we extend our work into a new version submitted to a journal. We are writing the paper now and release the latest code of the extended journal version. The code is still being organized and refined, and further updates will follow. Feel free to reach out if you have any questions.
+The journal extension is still being organized; updates will follow.
 
-**Here are the main improvements compared to the conference paper:**
+# What’s new in the journal extension
 
-- **Upgraded MoE Architecture**: We revise the MoE architecture to use top-$k$ routing with both shared and task-specific experts, enabling the model to learn compositional relationships among different constraint patterns. Load balancing is achieved through a loss-free, adaptive routing mechanism.
-
-- **Perturbation within Wasserstein Ball**: Task embedding perturbations are constrained to lie within a Wasserstein ball centered at the original embedding.
-
-- **TokenMemory for Generalization**: Patterns learned from synthetic datasets with single constraints are encoded as dedicated tokens in a TokenMemory module. At inference time (e.g., on MIPLIB instances), the model composes these tokens to handle problems with complex, mixed constraint types, thereby improving generalization.
-
-- **Expanded Synthetic Datasets**: We extend the training data to include 8–10 diverse synthetic datasets, each modeling distinct constraint structures.
+- **Upgraded MoE architecture**: top-`k` routing with shared + task-specific experts; adaptive routing without additional load-balancing loss.
+- **Perturbation within Wasserstein ball**: task-embedding perturbations are constrained in a Wasserstein ball around the original embedding.
+- **Expanded synthetic datasets**: broader training coverage with more diverse MILP structures.
 
 # Environment Setup
 
@@ -36,17 +32,20 @@ The workspace is organized as follows:
 ```
 RoME/
 ├── dataset/                # dataset directory
-│   ├── graph_dataset.py    # graph dataset for MILP
-├── instance/               # instances directory
+├── data/                   # processed data cache
 ├── test_logs/              # output directory and log files
 ├── train_logs/             # output directory and log files
-├── pretrain_models         # pretrained models directory
-├── solver                  # solvers directory, including guorbi and scip
-├── model                   # GNN modules
-│   ├── gcn.py              # gcn module 
-│   ├── moe.py              # moe module 
-│   ├── loss.py             # dro loss module 
-├── preprocess.py           # precess MILP instances
+├── pretrain_models/        # pretrained models directory
+├── solver/                 # solvers directory, including gurobi and scip
+├── model/                  # GNN modules
+│   ├── gcn.py              # gcn module
+│   ├── moe.py              # moe module
+│   ├── loss.py             # dro loss module
+├── scripts/                # shell scripts for batch processing
+│   ├── process.sh          # preprocessing script
+│   ├── train.sh            # training script
+│   └── test.sh             # testing script
+├── preprocess.py           # preprocess MILP instances
 ├── calculate_objective.py  # calculate the objectives
 ├── train.py                # training
 ├── test.py                 # testing
@@ -56,46 +55,108 @@ RoME/
 └── README.md
 ```
 
+## Artifacts (Datasets / Logs )
+
+- **Conference-version dataset**: https://huggingface.co/datasets/tianle326/L2O-MILP
+- **Journal-extension dataset**: https://huggingface.co/datasets/tianle326/RoME
+- **Journal-extension testing logs**: https://huggingface.co/datasets/tianle326/RoME
+
+## Datasets
+
+We consider three groups of datasets:
+
+### Synthetic datasets (training)
+
+RoME is trained on the following synthetic datasets:
+
+- **BP**: Bin Packing
+- **CA**: Combinatorial Auction
+- **CFLP**: Capacitated Facility Location
+- **GISP**: Generalized Independent Set
+- **IP**: Balanced Item Placement
+- **LB**: Load Balancing
+- **MIS**: Maximum Independent Set
+- **MVC**: Minimum Vertex Cover
+- **SC**: Set Cover
+
+### Synthetic datasets (testing)
+
+RoME is evaluated on the following synthetic datasets:
+
+- **BP**: Bin Packing
+- **CA**: Combinatorial Auction
+- **CFLP**: Capacitated Facility Location
+- **GC**: Graph Coloring
+- **GISP**: Generalized Independent Set
+- **IP**: Balanced Item Placement
+- **JS**: Job-Shop Scheduling
+- **LB**: Load Balancing
+- **MC**: Max Cut
+- **MIS**: Maximum Independent Set
+- **MVC**: Minimum Vertex Cover
+- **NF**: Multicommodity Network Flow
+- **PF**: Protein Folding
+- **SC**: Set Cover
+
+### Real-world datasets (testing)
+
+In addition to synthetic benchmarks, we evaluate on real-world MILP datasets:
+
+- **MIRP**: Maritime Inventory Routing
+- **MMCN**: Middle-Mile Consolidation Network Design
+- **NNV**: Neural Network Verification
+- **OTS**: Optimal Transmission Switching under High Wildfire Ignition Risk
+- **SRPN**: Seismic-Resilient Pipe Network Planning
+
 ## Usage
+
+### Shell Scripts
+
+The `scripts/` directory contains batch processing scripts for convenience:
+
+- **process.sh**: Preprocessing script with example configurations
+- **train.sh**: Training script with full parameter settings
+- **test.sh**: Testing script with example test configurations
+
+You can modify these scripts according to your needs or follow the step-by-step instructions below.
 
 ### 1. Data generation
 
-We use [Ecole](https://www.ecole.ai/) library to generate Independent Set (IS), Combinatorial Auction (CA) and Set Cover (SC) instance, and obtain the Balanced Item Placement (IP) and Workload Appointment (WA) instances from the ML4CO 2021 competition [generator](https://github.com/ds4dm/ml4co-competition-hidden). 
+We generate synthetic instances using [Ecole](https://www.ecole.ai/), obtain instances from existing generators (e.g., the ML4CO 2021 competition [generator](https://github.com/ds4dm/ml4co-competition-hidden) and Distributional [MIPLIB](https://sites.google.com/usc.edu/distributional-miplib/home)), and also generate instances using our own framework **[MILP‑X](https://github.com/happypu326/MILP-X)**.
 
-For each benchmarks, we generate 300 instances for training and 100 instances for testing. We take SC for example, after generating the instances, place them in the `instance` directory following this structure: `instance/train/SC` and `instance/test/SC`.
-
-We’ve uploaded our data used in the conference version to Hugging Face, which you can access here: https://huggingface.co/datasets/tianle326/L2O-MILP.
-
-Note: we also collect more synthetic datasets for training in the journal version, like Minimum Vertex Cover, Multiple Knapsack, Bin Packing, Capacitated Facility Location, Generalized Independent Set and so on.
+For each benchmarks, we generate 300 instances for training and 100 instances for testing. 
 
 ### 2. Preprocessing
 
-To preprocess a dataset (e.g., `SC`), run:
+To preprocess a dataset (e.g., `CA`), run:
 
 ```bash
-python preprocess.py --problem_type "SC" --max_time 3600 --workers 10
+python preprocess.py --mode train --max_time 3600 --workers 20 --task "CA" --difficulty "hard"
 ```
 
 The corresponding bipartite graph (BG) and solution will be automatically generated in the dataset folder.
 
 ### 3. Train
 
-We take the same settings in the conference paper for example. We train the model using IS, IP and SC, run:
+As an example, we train the model using the following nine synthetic datasets: BP, CA, CFLP, GISP, IP, LB, MIS, MVC, SC. The training command is:
 
 ```bash
 python train.py \
   --method_type RoME \
-  --problem_type IS IP SC \
+  --problem_type BP CA CFLP GISP IP LB MIS MVC SC \
   --gnn_type moe \
-  --device cuda:0 \
-  --num_dedicate_experts 5 \
-  --num_shared_experts 1 \
-  --top_k 2 \
+  --device cuda:2 \
+  --num_dedicate_experts 16 \
+  --num_shared_experts 2 \
+  --top_k 8 \
+  --eps_wasserstein 0.2 \
   --lr 0.0001 \
-  --num_epochs 150
+  --num_epochs 80 \
+  --patience  20 \
+  --min_delta 0.0001
 ```
 
-We upload the pretrained model on the IS, IP and SC using the above parameter settings into the `pretrain_models` folder.
+We have uploaded the pretrained model (trained on the above nine datasets with the specified hyperparameters) into the `pretrain_models` folder.
 
 ### 4. Test
 
@@ -106,17 +167,19 @@ python test.py \
     --time_flag [time flag] \
     --method_type "RoME" \
     --test_problem_type "CA" \
-    --training_problem_types "IS_IP_SC" \
+    --difficulty "hard" \
+    --training_problem_types "BP_CA_CFLP_GISP_IP_LB_MIS_MVC_SC" \
     --test_num 100 \
     --gnn_type "moe" \
     --solver "gurobi" \
-    --device "cuda:0" \
+    --device "cpu" \
     --emb_size 64 \
-    --num_shared_experts 1 \
-    --num_dedicate_experts 5 \
-    --top_k 2 \
+    --num_shared_experts 2 \
+    --num_dedicate_experts 16 \
+    --top_k 8 \
     --max_time 1000 \
-    --num_workers 16
+    --num_workers 20 \
+    --instance_dir "/data/RoME/dataset/test"
 ```
 
 Note: To avoid the impact of physical machine specifications on experimental results, it is recommended that the number of processes configured during preprocessing and testing does not exceed the maximum number of threads supported by the machine during **preprocess and testing**. For parallel testing, we pre-cache the scores of all instances in the `best_scores` folder. You can decide whether to enable this caching mechanism based on your specific use case.
@@ -131,9 +194,10 @@ If you find RoME useful or relevant to your research, please consider citing our
   author={Pu, Tianle and Geng, Zijie and Liu, Haoyang and Liu, Shixuan and Wang, Jie and Zeng, Li and Chen, Chao and Fan, Changjun},
   booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems},
   year={2025},
-  url={}
+  url={https://openreview.net/forum?id=VmK7gYaKXl}
 }
 ```
 
+# Our Other Work
 
-
+**MILP‑X** is a unified framework that enables training and testing with just a few commands. It also inherits data generation code for various datasets, allowing users to generate data seamlessly. You can access it here: https://github.com/happypu326/MILP-X

@@ -11,6 +11,7 @@ import time
 
 from solver import Solver
 
+
 class SCIPSolver(Solver):
 	def __str__(self):
 		return 'scip'
@@ -113,6 +114,7 @@ class SCIPSolver(Solver):
 		objs = np.array(objs, dtype=np.float32)
 		return sols, objs
 
+
 class SCIPLogger(scip.Eventhdlr):
 
 	def eventinit(self):
@@ -124,7 +126,6 @@ class SCIPLogger(scip.Eventhdlr):
 		end_time = time.monotonic()
 		obj = self.model.getSolObjVal(self.model.getBestSol())
 		log_entry = dict()
-
 		log_entry['Incumbent'] = obj
 		log_entry['Time'] = end_time - self.start_time + self.logs.loc[len(self.logs) - 1, 'Time']
 		log_entry['Gap'] = self.model.getGap() / 100

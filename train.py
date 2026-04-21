@@ -7,7 +7,7 @@ import random
 import time
 from datetime import datetime
 
-from model.gcn import GNNPolicy
+from model.gcn_at1 import GNNPolicy
 from model.moe import MoEPolicy
 from model.loss import LossComputer
 from dataset.graph_dataset import GraphDataset
@@ -20,17 +20,16 @@ torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
 
 # Predefined task-specific parameters
-PROBLEM_CLASS = {"IS": 0, "IP": 1, "SC": 2, "MVC": 3, "CA": 4, "WA": 5}
-GROUP_CLASS = {0: "IS", 1: "IP", 2: "SC", 3: "MVC", 4: "CA", 5: "WA"}
+PROBLEM_CLASS = {"IP": 0, 'CA': 1, 'SC': 2, "BP": 3, "CFLP": 4, "GISP": 5, "MIS": 6, "MVC": 7, "LB": 8}
+GROUP_CLASS = {0: "IP", 1: "CA", 2: "SC", 3: "BP", 4: "CFLP", 5: "GISP", 6: "MIS",7: "MVC", 8: "LB"}
 TASK_BATCH_SIZE = 1
-ENERGY_WEIGHT_NORM = {"IP": 10, "WA": 100, "IS": -100, 'CA': -10000, 'SC': 100, "MVC": 100}
+ENERGY_WEIGHT_NORM = {"IP": 1, 'CA': -100000, 'SC': 100, "BP": -10000, "CFLP": 10000, "GISP": 1000, "MIS": -1000, "MVC": 100, "LB": 100}
 
 
 def train(method_type, gnn_type, predict, data_loader, optimizer=None, loss_computer=None,other_loss_ratio=0.1, device='cpu'):
     """
     This function will process a whole epoch of training or validation, depending on whether an optimizer is provided.
     """
-
     if optimizer:
         predict.train()
     else:
@@ -41,7 +40,7 @@ def train(method_type, gnn_type, predict, data_loader, optimizer=None, loss_comp
         for step, batch in enumerate(data_loader):
             batch = batch.to(device)
             group = batch.group
-            # Get target solutions in list format
+            # get target solutions in list format
             solInd = batch.nsols
             target_sols = []
             target_vals = []
@@ -49,7 +48,7 @@ def train(method_type, gnn_type, predict, data_loader, optimizer=None, loss_comp
             valEndInd = 0
 
             batch_indices = []
-            for i in range(solInd.shape[0]):
+            for i in range(solInd.shape[0]):#for in batch
                 nvar = len(batch.varInds[i][0][0])
                 batch_indices.extend([i] * nvar)
                 solStartInd = solEndInd
@@ -64,7 +63,7 @@ def train(method_type, gnn_type, predict, data_loader, optimizer=None, loss_comp
 
             # Compute the logits (i.e. pre-softmax activations) according to the policy on the concatenated graphs
             batch.constraint_features[torch.isinf(batch.constraint_features)] = 10 #remove nan value
-            # Predict the binary distribution, BD
+            #predict the binary distribution, BD
             BD = predict(
                 batch.constraint_features,
                 batch.edge_index,
@@ -78,31 +77,30 @@ def train(method_type, gnn_type, predict, data_loader, optimizer=None, loss_comp
                 
             BD = BD.sigmoid()
 
-            # Compute loss
+            # compute loss
             loss = 0
             loss_list = []
-
-            # Calculate weights
+            # calculate weights
             index_arrow = 0
             for ind,(sols,vals) in enumerate(zip(target_sols,target_vals)):
                 group_ind = group[ind].cpu().item()
                 problem_ind = GROUP_CLASS[group_ind]
                 weight_norm = ENERGY_WEIGHT_NORM.get(problem_ind, 1)
-                
-                # Compute weight
+
+                #compute weight
                 n_vals = vals
                 exp_weight = torch.exp(-n_vals/weight_norm)
                 weight = exp_weight/exp_weight.sum()
 
-                # Get a binary mask
+                # get a binary mask
                 varInds = batch.varInds[ind]
                 varname_map=varInds[0][0]
                 b_vars=varInds[1][0].long()
 
-                # Get binary variables
+                #get binary variables
                 sols = sols[:,varname_map][:,b_vars]
 
-                # Cross-entropy
+                # cross-entropy
                 n_var = batch.ntvars[ind]
                 pre_sols = BD[index_arrow:index_arrow + n_var].squeeze()[b_vars]
                 index_arrow = index_arrow + n_var
@@ -113,7 +111,6 @@ def train(method_type, gnn_type, predict, data_loader, optimizer=None, loss_comp
 
                 sample_loss = sum_loss*weight[:,None]
                 total_sample_loss = sample_loss.sum()
-
                 loss_list.append(total_sample_loss)
             
             batch_loss = torch.stack(loss_list)
@@ -148,22 +145,24 @@ def get_parser():
     parser.add_argument("--method_type", default='RoME', choices=['PS', 'RoME'],
                        help="Training method type (default: %(default)s)")
     parser.add_argument("--problem_type", type=str, nargs='+', choices=TASKS, default=['IS', 'IP', 'SC'],
-                       help="Problem type to train on (e.g., IS, WA, IP)") 
+                       help="Problem type to train on (e.g., IS, WA, IP)")
     parser.add_argument("--gnn_type", default='moe', choices=['gcn', 'moe'],
                        help="Type of GNN architecture (default: %(default)s)")
     parser.add_argument("--lr", type=float, default=0.0001,
                        help="Learning rate for optimizer (default: %(default)s)")
-    parser.add_argument("--num_epochs", type=int, default=150,
+    parser.add_argument("--num_epochs", type=int, default=500,
                        help="Number of training epochs (default: %(default)s)")
     parser.add_argument("--num_workers", type=int, default=0,
                        help="Number of data loader workers (default: %(default)s)")
-    parser.add_argument("--data_dir", default="./dataset",
+    parser.add_argument("--data_dir", default="./data",
                        help="Base directory for dataset (default: %(default)s)")
     parser.add_argument("--model_save_dir", default="./pretrain_models",
                        help="Directory to save models (default: %(default)s)")
     parser.add_argument("--log_save_dir", default="./train_logs",
                        help="Directory to save logs (default: %(default)s)")
-    parser.add_argument("--device",default="cuda:0", help="cuda device")
+    parser.add_argument("--device",default="cuda:7", help="cuda device")
+    parser.add_argument("--difficulty",default="hard", help="The difficulty of dataset")
+    parser.add_argument("--gurobi_time",default="3600s", help="The time Gurobi takes to process the dataset")
 
     # gcn configuration
     parser.add_argument("--emb_size", type=int, default=64,
@@ -178,12 +177,12 @@ def get_parser():
     # MoE configuration
     parser.add_argument("--num_shared_experts", type=int, default=1,
                        help="Number of shared experts in MoE (default: %(default)s)")
-    parser.add_argument("--num_dedicate_experts", type=int, default=5,
+    parser.add_argument("--num_dedicate_experts", type=int, default=3,
                        help="Number of dedicated experts in MoE (default: %(default)s)")
-    parser.add_argument("--top_k", type=int, default=2,
+    parser.add_argument("--top_k", type=int, default=1,
                        help="Top-K experts to select (default: %(default)s)")
     parser.add_argument("--eps_wasserstein", type=float, default=0.1,
-                       help="Wasserstein ball radius for robust training (default: %(default)s)")
+                       help="Wasserstein ball radius for robust training (default: %(default)s)") # 0.1
     parser.add_argument("--gate_temperature", type=float, default=1.0,
                        help="Gate temperature (default: %(default)s)")
     parser.add_argument('--dro_perturb_type', type=str, default="gaussian", choices=["gaussian", "uniform"],
@@ -193,32 +192,25 @@ def get_parser():
                        help="Bias learning rate for gate network (default: %(default)s)")
     parser.add_argument('--use_dro', default=True, action='store_true',
                        help="Whether to use DRO (default: %(default)s)")
-    parser.add_argument('--use_struct_tokens', default=False, action='store_true',
-                       help="Whether to use structural tokens (default: %(default)s)")
-    parser.add_argument('--num_struct_tokens', type=int, default=64,
-                       help="Number of structural tokens (default: %(default)s)")
-    parser.add_argument('--struct_token_dim', type=int, default=64,
-                       help="Dimension of structural tokens (default: same as emb_size)")
-    parser.add_argument('--hard_token_routing', default=False, action='store_true',
-                       help="Whether to use hard token routing (default: %(default)s)")
-    parser.add_argument('--token_topk', type=int, default=8,
-                       help="Top-K tokens for hard routing (default: %(default)s)")
     
     # RoME congiguration
     parser.add_argument('--robust', default=True, action='store_true')
+    parser.add_argument('--alpha', type=float, default=0.2)
     parser.add_argument('--generalization_adjustment', default="0.0")
     parser.add_argument('--robust_step_size', default=0.001, type=float)
     parser.add_argument('--use_normalized_loss', default=True, action='store_true')
+    parser.add_argument('--btl', default=False, action='store_true')
     parser.add_argument('--gamma', type=float, default=0.1)
+    parser.add_argument('--minimum_variational_weight', type=float, default=0)
     
     # Model saving configuration
     parser.add_argument('--save_top_k', type=int, default=3,
                        help="Number of best models to keep (default: %(default)s)")
     
     # Early stopping configuration
-    parser.add_argument('--patience', type=int, default=30,
+    parser.add_argument('--patience', type=int, default=100,
                        help="Number of epochs to wait for improvement before stopping (default: %(default)s)")
-    parser.add_argument('--min_delta', type=float, default=1e-6,
+    parser.add_argument('--min_delta', type=float, default=1e-5,
                        help="Minimum change in validation loss to qualify as improvement (default: %(default)s)")
     
     return parser
@@ -240,8 +232,11 @@ def main():
         problem_type = problem_type[:-1]
     else:
         problem_type = args.problem_type[0]
-    
-    save_name = f'{datetime.now().strftime("%Y%m%d_%H%M%S")}_{gnn_type}_shared_{args.num_shared_experts}_dedicate_{args.num_dedicate_experts}'
+
+    if method_type == 'RoME':
+        save_name = f'{datetime.now().strftime("%Y%m%d_%H%M%S")}_{gnn_type}_shared_{args.num_shared_experts}_dedicate_{args.num_dedicate_experts}'
+    elif method_type == 'PS':
+        save_name = f'{datetime.now().strftime("%Y%m%d_%H%M%S")}_{gnn_type}'
 
     # Create directories
     model_save_path = os.path.join(args.model_save_dir, method_type, problem_type)
@@ -261,11 +256,14 @@ def main():
     
     # Load dataset
     sample_files = []
+    guorobi_time = args.gurobi_time
+    difficulty = args.difficulty
     problem_types = args.problem_type if method_type == 'RoME' else [problem_type]
+
     for pt in problem_types:
-        dir_bg = os.path.join(args.data_dir, pt, 'BG')
-        dir_sol = os.path.join(args.data_dir, pt, 'solution')
-        pt_group = PROBLEM_CLASS.get(pt, 10)
+        dir_bg = os.path.join(args.data_dir, pt, difficulty, guorobi_time, 'BG')
+        dir_sol = os.path.join(args.data_dir, pt, difficulty, guorobi_time, 'solutions')
+        pt_group = PROBLEM_CLASS.get(pt, 20)
         sample_files.extend([
             (
                 os.path.join(dir_bg, name),
@@ -276,7 +274,7 @@ def main():
         ])
 
     random.shuffle(sample_files)
-    split_idx = int(0.8 * len(sample_files))
+    split_idx = int(0.7 * len(sample_files))
     train_files, valid_files = sample_files[:split_idx], sample_files[split_idx:]
 
     if method_type == 'RoME':
@@ -296,10 +294,13 @@ def main():
         train_loss_computer = LossComputer(
             is_robust=args.robust,
             group_stats=train_group_stats,
+            alpha=args.alpha,
             gamma=args.gamma,
             adj=adjustments,
             step_size=args.robust_step_size,
             normalize_loss=args.use_normalized_loss,
+            btl=args.btl,
+            min_var_weight=args.minimum_variational_weight,
             device=device)
     
     # Create data loaders
@@ -330,12 +331,7 @@ def main():
                           dropout=0.1,
                           use_dro=args.use_dro,
                           eps_wasserstein=args.eps_wasserstein,
-                          dro_perturb_type=args.dro_perturb_type,
-                          use_struct_tokens=args.use_struct_tokens,
-                          num_struct_tokens=args.num_struct_tokens,
-                          struct_token_dim=args.struct_token_dim,
-                          hard_token_routing=args.hard_token_routing,
-                          token_topk=args.token_topk).to(device)
+                          dro_perturb_type=args.dro_perturb_type).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # Initialize model stack for top K best models
@@ -353,6 +349,7 @@ def main():
                 is_robust=args.robust,
                 group_stats=valid_group_stats,
                 step_size=args.robust_step_size,
+                alpha=args.alpha,
                 device=device)
             train_loss = train(method_type, gnn_type, model, train_loader, optimizer, loss_computer=train_loss_computer,other_loss_ratio=args.other_loss_ratio, device=device)
             valid_loss = train(method_type, gnn_type, model, valid_loader, None, loss_computer=val_loss_computer,other_loss_ratio=args.other_loss_ratio, device=device)

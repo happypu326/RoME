@@ -1,16 +1,19 @@
-nohup python multi_test.py \
-    --time_flag "20251022_195506" \
+nohup python test.py \
+    --time_flag "20260123_105309" \
     --method_type "RoME" \
-    --test_problem_type "CA" \
-    --training_problem_types "IS_IP_SC" \
+    --test_problem_type "JS" \
+    --difficulty "hard" \
+    --training_problem_types "BP_CA_CFLP_GISP_IP_LB_MIS_MVC_SC" \
     --test_num 100 \
     --gnn_type "moe" \
     --solver "gurobi" \
-    --device "cuda:0" \
+    --device "cpu" \
     --emb_size 64 \
-    --num_shared_experts 1 \
-    --num_dedicate_experts 5 \
-    --top_k 2 \
+    --num_shared_experts 2 \
+    --num_dedicate_experts 16 \
+    --top_k 8 \
     --max_time 1000 \
-    --num_workers 16 \
+    --num_workers 20 \
+    --instance_dir "/data/RoME/dataset/test" \
     > ./logs/test.log &
+

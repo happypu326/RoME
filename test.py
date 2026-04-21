@@ -14,7 +14,6 @@ from solver.solver_utils import SOLVER_CLASSES
 from model.gcn import GNNPolicy
 from multiprocessing import Process, Queue, cpu_count, set_start_method
 
-
 def setup_environment(seed: int = 0):
     random.seed(seed)
     torch.manual_seed(seed)
@@ -41,7 +40,6 @@ def configure_logging(log_dir: str) -> logging.Logger:
     
     return logger
 
-
 def load_pretrained_model(args: argparse.Namespace, model_path: str, device: torch.device):
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
@@ -64,12 +62,7 @@ def load_pretrained_model(args: argparse.Namespace, model_path: str, device: tor
                           dropout=0.1,
                           use_dro=args.use_dro,
                           eps_wasserstein=args.eps_wasserstein,
-                          dro_perturb_type=args.dro_perturb_type,
-                          use_struct_tokens=args.use_struct_tokens,
-                          num_struct_tokens=args.num_struct_tokens,
-                          struct_token_dim=args.struct_token_dim,
-                          hard_token_routing=args.hard_token_routing,
-                          token_topk=args.token_topk).to(device)
+                          dro_perturb_type=args.dro_perturb_type).to(device)
 
     state = torch.load(model_path, map_location=device)
     model.load_state_dict(state, strict=False)
@@ -88,7 +81,6 @@ def process_single_instance(gnn_type,  ins_path, policy, device):
     edge_features=torch.ones(edge_features.shape)
     batch_indices = torch.zeros(v_nodes.shape[0], dtype=torch.long)
 
-    # Prediction
     if gnn_type == 'gcn':
         BD = policy(
             constraint_features.to(device),
@@ -108,12 +100,12 @@ def process_single_instance(gnn_type,  ins_path, policy, device):
         )
         BD = BD.sigmoid().cpu().squeeze()
 
-    # Align the variable name betweend the output and the solver
+    #align the variable name betweend the output and the solver
     all_varname=[]
     for name in v_map:
         all_varname.append(name)
     binary_name=[all_varname[i] for i in b_vars]
-    scores=[] # Get a list of (index, VariableName, Prob, -1, type)
+    scores=[]#get a list of (index, VariableName, Prob, -1, type)
     for i in range(len(v_map)):
         type="C"
         if all_varname[i] in binary_name:
@@ -126,10 +118,29 @@ def process_single_instance(gnn_type,  ins_path, policy, device):
     return scores
 
 def fix_pas(scores, task):
-    hyperparam = {"IP": (60, 35, 55), "IS": (250, 200, 15), "WA": (20, 200, 100), "CA": (400, 0, 60), "SC" : (1000, 0, 200)}
-    k0, k1, delta = hyperparam[task]
+    hyperparam = {"IP": (60, 30, 70), "MIS": (600, 600, 100), "WA": (20, 200, 100), "CA": (150, 0, 25), "SC" : (300, 0, 100), 
+                   "BP": (100, 0, 50), "CFLP": (30, 0, 30), "GISP": (1000, 100, 120), "LB":   (300, 100, 150), "MVC":  (40, 0, 30),
+                   "MIRP": (0.6, 0, 0.3), "MMCN": (0.5, 0, 0.3), "NNV": (0.6, 0, 0.3),"OTS": (0.6, 0, 0.3),"SRPN": (0.5, 0, 0.3), 
+                   "GC": (0.6, 0, 0.3), "JS": (0.5, 0, 0.3), "MC":(0.5, 0, 0.3), "NF":(0.6, 0, 0.3), "PF":(0.5, 0, 0.3)
+                   }
+    k0_raw, k1_raw, delta_raw = hyperparam[task]
 
-    # Fixing variable picked by confidence scores
+    N = len(scores)
+
+    def compute_k(k_raw):
+        if isinstance(k_raw, float) and 0 < k_raw < 1:
+            return int(k_raw * N)
+        else:
+            return int(k_raw)
+
+    k0 = compute_k(k0_raw)
+    k1 = compute_k(k1_raw)
+    delta = compute_k(delta_raw)
+
+    k0 = min(k0, N)
+    k1 = min(k1, N)
+    delta =min(delta, N)
+
     scores.sort(key=lambda x: x[2], reverse=True)
     for i in range(min(len(scores), k1)):
         scores[i][3] = 1
@@ -140,30 +151,54 @@ def fix_pas(scores, task):
 
     return scores, delta
 
+def fix_soft_confidence(scores, task):
+    hyperparam = {"CA": (0.99, 0.12), "IP": (0.93, 0.01), "SC": (0.96, 0.02), "MIS": (0.95, 0.05), "CFLP": (0.98, 0.02),
+                 "GISP": (0.95, 0.05), "LB":   (0.99, 0.15), "MVC":  (0.97, 0.02), "BP": (0.95, 0.05),
+                 "MIRP":(0.99, 0.20), "MMCN": (0.97, 0.15), "NNV": (0.97, 0.30),"OTS": (0.97, 0.15),"SRPN": (0.97, 0.15),
+                 "IIS": (0.97, 0.02)} 
+    threshold, alpha = hyperparam[task]
+    tot_fix = 0
+
+    for i in range(len(scores)):
+        if scores[i][2] > threshold:
+            scores[i][3] = 1
+            tot_fix += 1
+
+    for i in range(len(scores)):
+        if scores[i][2] < 1 - threshold:
+            scores[i][3] = 0
+            tot_fix += 1
+
+    print(len(scores), tot_fix)
+    return scores, tot_fix * alpha
+
 def solve_mps(mps_file, log_dir, save_name, ins_name, scores, task, args):
     log_file = log_dir
     solver = SOLVER_CLASSES[args.solver]()
     solver.hide_output_to_console()
 
-    # Read instance
+    # read instance
     solver.load_model(mps_file)
 
     solver.set_aggressive()
 
-    scores, delta = fix_pas(scores, task)
+    if args.fix_strategy == 'pas':
+        scores, delta = fix_pas(scores, task)
+    else:
+        scores, delta = fix_soft_confidence(scores, task)
 
-    # Trust region method implemented by adding constraints
+    # trust region method implemented by adding constraints
     instance_variables = solver.get_vars()
     instance_variables.sort(key=lambda v: solver.varname(v))
 
     variables_map = {}
-    for v in instance_variables:  
+    for v in instance_variables:  # get a dict (variable map), varname:var clasee
         variables_map[solver.varname(v)] = v
 
     alphas = []
 
     for i in range(len(scores)):
-        tar_var = variables_map[scores[i][1]]  # Target variable <-- Variable map
+        tar_var = variables_map[scores[i][1]]  # target variable <-- variable map
         x_star = scores[i][3]  # 1,0,-1, decide whether need to fix
         if x_star < 0:
             continue
@@ -190,6 +225,9 @@ def parse_arguments() -> argparse.Namespace:
     exp_group.add_argument("--training_problem_types", type=str, default='IS_IP_SC',help="Problem type to train on (e.g., IS, WA, IP)")
     exp_group.add_argument("--test_num", type=int, default=100,
                          help="Number of test instances to process")
+    exp_group.add_argument("--difficulty",default="hard", help="The difficulty of dataset")
+    exp_group.add_argument("--gurobi_time",default="1000s", help="The time Gurobi takes to process the dataset")
+    exp_group.add_argument("--real_world", action='store_true', default=False)
     
     model_group = parser.add_argument_group("Model Settings")
     model_group.add_argument("--gnn_type", default="moe", choices=["gcn", "moe"],
@@ -210,9 +248,9 @@ def parse_arguments() -> argparse.Namespace:
     moe_group = parser.add_argument_group("MoE Settings")
     moe_group.add_argument("--num_shared_experts", type=int, default=1,
                        help="Number of shared experts in MoE (default: %(default)s)")
-    moe_group.add_argument("--num_dedicate_experts", type=int, default=5,
+    moe_group.add_argument("--num_dedicate_experts", type=int, default=3,
                        help="Number of dedicated experts in MoE (default: %(default)s)")
-    moe_group.add_argument("--top_k", type=int, default=2,
+    moe_group.add_argument("--top_k", type=int, default=1,
                        help="Top-K experts to select (default: %(default)s)")
     moe_group.add_argument("--eps_wasserstein", type=float, default=0.1,
                        help="Wasserstein ball radius for robust training (default: %(default)s)")
@@ -228,16 +266,6 @@ def parse_arguments() -> argparse.Namespace:
                        help="Bias learning rate for gate network (default: %(default)s)")
     moe_group.add_argument('--use_dro', default=True, action='store_true',
                        help="Whether to use DRO (default: %(default)s)")
-    moe_group.add_argument('--use_struct_tokens', default=False, action='store_true',
-                       help="Whether to use structural tokens (default: %(default)s)")
-    moe_group.add_argument('--num_struct_tokens', type=int, default=64,
-                       help="Number of structural tokens (default: %(default)s)")
-    moe_group.add_argument('--struct_token_dim', type=int, default=None,
-                       help="Dimension of structural tokens (default: same as emb_size)")
-    moe_group.add_argument('--hard_token_routing', default=False, action='store_true',
-                       help="Whether to use hard token routing (default: %(default)s)")
-    moe_group.add_argument('--token_topk', type=int, default=8,
-                       help="Top-K tokens for hard routing (default: %(default)s)")
 
     # RoME configuration
     moe_group.add_argument('--robust', default=True, action='store_true')
@@ -253,41 +281,42 @@ def parse_arguments() -> argparse.Namespace:
                             help="Maximum solving time in seconds")
     solver_group.add_argument("--threads", type=int, default=1,
                             help="Number of threads for solving")
+    solver_group.add_argument("--fix_strategy", choices=["pas", "soft_confidence"], default="pas",
+                            help="Variable fixing strategy (default: %(default)s)")
  
     sys_group = parser.add_argument_group("System Settings")
     sys_group.add_argument("--instance_dir", default="./instance/test",
                          help="Path to test instances directory")
     sys_group.add_argument("--log_dir", default="./test_logs/",
                          help="Path to test instances directory")
-    sys_group.add_argument("--scores_dir", default="./best_scores",
+    sys_group.add_argument("--scores_dir", default="./rome_best_scores",
                          help="Path to store scores directory")
-    sys_group.add_argument("--device", default="cuda:0",
+    sys_group.add_argument("--device", default="cuda:6",
                          help="Computation device (default: %(default)s)")
     sys_group.add_argument("--num_workers", type=int, default=1,
                          help="Number of parallel workers (default: %(default)s)")
     sys_group.add_argument('--load_scores', default=False, action='store_true')
-    sys_group.add_argument("--time_flag", default="20251022_195506",
+    sys_group.add_argument("--time_flag", default="20251126_234927",
                          help="Computation device (default: %(default)s)")
     
     return parser.parse_args()
 
 def worker_process(task_queue, args, scores_dir, log_dir, save_name):
-    # Each process initializes its own logger (ensure process safety)
     logger = configure_logging(log_dir=log_dir)
     
     while True:
         ins_name = task_queue.get()
-        if ins_name is None:  # Termination signal
+        if ins_name is None:
             break
         
         try:
-            ins_path = os.path.join(args.instance_dir, args.test_problem_type, ins_name)
-            log_path = os.path.join(log_dir, f"{save_name}_{ins_name.split('.')[0]}.log")
+            ins_path = os.path.join(args.instance_dir, args.test_problem_type, args.difficulty, ins_name)
+            log_path = os.path.join(log_dir, f"{ins_name}.log")
             if args.load_scores:
-                with open(os.path.join(args.instance_dir, f'scores_{args.test_problem_type}', f"scores_{ins_name.split('.')[0]}.pkl"), "rb") as f:
+                with open(os.path.join(args.instance_dir, f'scores_{args.test_problem_type}', f"scores_{ins_name.rsplit('.', 1)[0]}.pkl"), "rb") as f:
                     scores = pickle.load(f)
             else:
-                score_path = os.path.join(scores_dir, f"scores_{ins_name.split('.')[0]}.pkl")
+                score_path = os.path.join(scores_dir, f"scores_{ins_name.rsplit('.', 1)[0]}.pkl")
                 with open(score_path, "rb") as f:
                     scores = pickle.load(f)
             
@@ -300,27 +329,27 @@ def worker_process(task_queue, args, scores_dir, log_dir, save_name):
 def main():
     setup_environment()
     args = parse_arguments()
-    
-    # Main process loads model (only once)
-    save_name = f'{args.time_flag}_{args.gnn_type}_shared_{args.num_shared_experts}_dedicate_{args.num_dedicate_experts}'
+
+    if args.gnn_type == "moe":
+        save_name = f'{args.time_flag}_{args.gnn_type}_shared_{args.num_shared_experts}_dedicate_{args.num_dedicate_experts}'
+    elif args.gnn_type == "gcn":
+        save_name = f'{args.time_flag}_{args.gnn_type}'
     model_path = os.path.join(args.model_dir, args.method_type, args.training_problem_types, f"{save_name}_model_best.pth")
     policy = load_pretrained_model(args, model_path, args.device)
-    
-    # Log directory setup
-    log_dir = os.path.join(args.log_dir, args.method_type, args.test_problem_type, 
+
+    log_dir = os.path.join(args.log_dir, args.method_type, args.solver, args.test_problem_type, args.difficulty, args.gurobi_time, 
                          f"{save_name}")
     os.makedirs(log_dir, exist_ok=True)
 
-    # Prepare task queue
-    scores_dir = os.path.join(args.scores_dir, args.method_type, args.test_problem_type, 
+    scores_dir = os.path.join(args.scores_dir, args.method_type, args.solver, args.test_problem_type, args.difficulty, args.gurobi_time, 
                          f"{save_name}")
     os.makedirs(scores_dir, exist_ok=True)
 
-    test_instances = sorted(os.listdir(os.path.join(args.instance_dir, args.test_problem_type)))
+    test_instances = sorted(os.listdir(os.path.join(args.instance_dir, args.test_problem_type, args.difficulty)))
     if not args.load_scores:
-        for ins_name in test_instances[:args.test_num]:
-            ins_path = os.path.join(args.instance_dir, args.test_problem_type, ins_name)
-            file_path = os.path.join(scores_dir, f"scores_{ins_name.split('.')[0]}.pkl")
+        for ins_name in test_instances:
+            ins_path = os.path.join(args.instance_dir, args.test_problem_type, args.difficulty, ins_name)
+            file_path = os.path.join(scores_dir, f"scores_{ins_name.rsplit('.', 1)[0]}.pkl")
             if os.path.exists(file_path):
                 continue
             scores = process_single_instance(args.gnn_type, ins_path, policy, args.device)
@@ -328,18 +357,15 @@ def main():
                 pickle.dump(scores, f)
 
     task_queue = Queue()
-    
-    # Populate task queue
-    for ins_name in test_instances[:args.test_num]:
+
+    for ins_name in test_instances:
         task_queue.put(ins_name)
     
     num_workers = args.num_workers
-    
-    # Add termination signals
+
     for _ in range(num_workers):
         task_queue.put(None)
-    
-    # Start worker processes
+
     processes = []
     for _ in range(num_workers):
         p = Process(
@@ -348,8 +374,7 @@ def main():
         )
         p.start()
         processes.append(p)
-    
-    # Wait for all processes to complete
+
     for p in processes:
         p.join()
     

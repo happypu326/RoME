@@ -39,11 +39,14 @@ class Solver(abc.ABC):
 	def disable_cuts(self):
 		raise NotImplementedError('disable_cuts not implemented')
 
+
 	def disable_heuristics(self):
 		raise NotImplementedError('disable_heuristics not implemented')
 
+
 	def set_aggressive(self):
 		raise NotImplementedError('set_aggressive not implemented')
+
 
 	def get_sol_data(self):
 		raise NotImplementedError('get_sol_data not implemented')

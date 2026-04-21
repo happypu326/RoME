@@ -1,0 +1,1 @@
+nohup python preprocess.py --mode train --max_time 3600 --workers 20 --task "MVC" --difficulty "hard" > ./logs/process.log 2>&1 &

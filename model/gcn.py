@@ -18,14 +18,18 @@ class GNNPolicy(torch.nn.Module):
         batch_indices=None,
         is_training=False,
     ):
-        
-        variable_features, constraint_features, cbloss = self.encoder(
+        encoder_out = self.encoder(
             constraint_features,
             edge_indices,
             edge_features,
             variable_features,
             batch_indices=batch_indices,
         )
+        if len(encoder_out) == 2:
+            variable_features, constraint_features = encoder_out
+            cbloss = None
+        else:
+            variable_features, constraint_features, cbloss = encoder_out
         output = self.decoder(variable_features)
         return output
 
@@ -44,7 +48,7 @@ class GNNEncoder(torch.nn.Module):
         self.edge_nfeats = edge_nfeats
         self.var_nfeats = variable_nfeats
 
-        # Constraint embedding
+        # CONSTRAINT EMBEDDING
         self.cons_embedding = torch.nn.Sequential(
             torch.nn.LayerNorm(self.cons_nfeats),
             torch.nn.Linear(self.cons_nfeats, self.emb_size),
@@ -53,12 +57,12 @@ class GNNEncoder(torch.nn.Module):
             torch.nn.ReLU(),
         )
 
-        # Edge embedding
+        # EDGE EMBEDDING
         self.edge_embedding = torch.nn.Sequential(
             torch.nn.LayerNorm(self.edge_nfeats),
         )
 
-        # Variable embedding
+        # VARIABLE EMBEDDING
         self.var_embedding = torch.nn.Sequential(
             torch.nn.LayerNorm(self.var_nfeats),
             torch.nn.Linear(self.var_nfeats, emb_size),
@@ -170,8 +174,8 @@ class BipartiteGraphConvolution(torch_geometric.nn.MessagePassing):
         )
 
     def message(self, node_features_i, node_features_j, edge_features):
-        # node_features_i, the node to be aggregated
-        # node_features_j, the neighbors of the node i
+        # node_features_i,the node to be aggregated
+        # node_features_j,the neighbors of the node i
 
         output = self.feature_module_final(
             self.feature_module_left(node_features_i)

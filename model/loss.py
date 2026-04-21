@@ -1,164 +1,139 @@
 import torch
 
+
 class LossComputer:
-    """
-    Pure Group-DRO version (without btl / without CVaR), with simple debug prints.
-
-    is_robust = False: falls back to ERM (per_sample_losses.mean())
-    is_robust = True : uses historical EMA-based Group-DRO
-    """
-
-    def __init__(
-        self,
-        is_robust,
-        group_stats,
-        gamma=0.1,
-        adj=None,
-        step_size=0.01,
-        normalize_loss=False,
-        device="cpu",
-    ):
+    def __init__(self, is_robust, group_stats, alpha=None, gamma=0.1, adj=None, min_var_weight=0, step_size=0.01, normalize_loss=False, btl=False, device="cpu"):
         self.device = device
         self.is_robust = is_robust
         self.gamma = gamma
+        self.alpha = alpha
+        self.min_var_weight = min_var_weight
         self.step_size = step_size
         self.normalize_loss = normalize_loss
+        self.btl = btl
 
-        # Group-related statistics
-        self.n_groups = group_stats["n_groups"]
-        self.group_counts = group_stats["group_counts"].float().to(device)
-        self.group_frac = group_stats["group_frac"].float().to(device)
+        self.n_groups = group_stats['n_groups']
+        self.group_counts = group_stats['group_counts']
+        self.group_frac = group_stats['group_frac']
 
-        # Generalization adjustment
-        self.adj = torch.zeros(self.n_groups, device=device) if adj is None \
-            else torch.tensor(adj, dtype=torch.float32, device=device)
+        if adj is not None:
+            self.adj = torch.from_numpy(adj).float().to(self.device)
+        else:
+            self.adj = torch.zeros(self.n_groups).float().to(self.device)
 
-        # Adversarial distribution initialized as uniform
-        self.adv_probs = torch.ones(self.n_groups, device=device) / self.n_groups
+        if is_robust:
+            assert alpha, 'alpha must be specified'
 
-        # EMA of historical group losses
-        self.exp_avg_loss = torch.zeros(self.n_groups, device=device)
-        self.exp_avg_initialized = torch.zeros(self.n_groups, dtype=torch.bool, device=device)
+        # quantities maintained throughout training
+        self.adv_probs = torch.ones(self.n_groups).to(self.device) / self.n_groups
+        self.exp_avg_loss = torch.zeros(self.n_groups).to(self.device)
+        self.exp_avg_initialized = torch.zeros(self.n_groups).byte().to(self.device)
 
-        # Statistics & batch count
         self.reset_stats()
 
-    def loss(self, per_sample_losses, group_idx=None, is_training=True):
-        """
-        per_sample_losses: [B]
-        group_idx: [B], group id for each sample
-        is_training: if True, update EMA and statistics; if False, only forward computation
-        """
-        if group_idx is None:
-            return per_sample_losses.mean()
-
+    def loss(self, per_sample_losses, group_idx=None, is_training=False):
+        # compute per-sample and per-group losses
         group_loss, group_count = self.compute_group_avg(per_sample_losses, group_idx)
+        # update historical losses
+        self.update_exp_avg_loss(group_loss, group_count)
 
-        if self.is_robust:
-            actual_loss, weights = self.compute_robust_loss(group_loss)
+        # compute overall loss
+        if self.is_robust and not self.btl:
+            actual_loss, weights = self.compute_robust_loss(group_loss, group_count)
+        elif self.is_robust and self.btl:
+            actual_loss, weights = self.compute_robust_loss_btl(group_loss, group_count)
         else:
             actual_loss = per_sample_losses.mean()
             weights = None
 
-        if is_training:
-            self.update_exp_avg_loss(group_loss, group_count)
-            self.update_stats(actual_loss.detach(), group_loss.detach(), group_count, weights)
+        # update stats
+        self.update_stats(actual_loss, group_loss, group_count, weights)
 
         return actual_loss
 
-
-    def compute_robust_loss(self, group_loss):
-        """
-        Standard Group-DRO:
-        - Use historical EMA of group_loss + adjustment term as reference ref
-        - Update adv_probs via exponentiated-gradient
-        - Current batch robust_loss = group_loss · adv_probs
-        """
-        # Historical EMA + generalization adjustment
-        ref = self.exp_avg_loss.detach().clone() + self._safe_adj_over_counts()
-
+    def compute_robust_loss(self, group_loss, group_count):
+        adjusted_loss = group_loss
+        if torch.all(self.adj > 0):
+            adjusted_loss += self.adj / torch.sqrt(self.group_counts)
+        
         if self.normalize_loss:
-            # Normalize using z-score to avoid flattening differences by simple division by sum
-            mean = ref.mean()
-            std = ref.std(unbiased=False).clamp_min(1e-6)
-            ref = (ref - mean) / std
+            adjusted_loss = adjusted_loss / (adjusted_loss.sum())
+        self.adv_probs = self.adv_probs * torch.exp(self.step_size * adjusted_loss.data)
+        self.adv_probs = self.adv_probs / (self.adv_probs.sum())
 
-        with torch.no_grad():
-            w = torch.exp(self.step_size * ref)
-            self.adv_probs = w / w.sum().clamp_min(1e-12)
+        robust_loss = group_loss @ self.adv_probs
+        return robust_loss, self.adv_probs
 
-        robust_loss = (group_loss * self.adv_probs).sum()
-        return robust_loss, self.adv_probs.clone()
+    def compute_robust_loss_btl(self, group_loss, group_count):
+        adjusted_loss = self.exp_avg_loss + self.adj / torch.sqrt(self.group_counts)
+        return self.compute_robust_loss_greedy(group_loss, adjusted_loss)
 
+    def compute_robust_loss_greedy(self, group_loss, ref_loss):
+        sorted_idx = ref_loss.sort(descending=True)[1]
+        sorted_loss = group_loss[sorted_idx]
+        sorted_frac = self.group_frac[sorted_idx]
+
+        mask = torch.cumsum(sorted_frac, dim=0) <= self.alpha
+        weights = mask.float() * sorted_frac / self.alpha
+        last_idx = mask.sum()
+        weights[last_idx] = 1 - weights.sum()
+        weights = sorted_frac * self.min_var_weight + weights * (1 - self.min_var_weight)
+
+        robust_loss = sorted_loss @ weights
+
+        # sort the weights back
+        _, unsort_idx = sorted_idx.sort()
+        unsorted_weights = weights[unsort_idx]
+        return robust_loss, unsorted_weights
 
     def compute_group_avg(self, losses, group_idx):
-        """
-        Compute average loss per group based on group_idx
-        """
-        losses = losses.view(-1)
-        group_idx = group_idx.view(-1).to(self.device)
-        ids = torch.arange(self.n_groups, device=self.device)[:, None]  # [G,1]
-        group_map = (group_idx == ids).float()  # [G,B]
-        count = group_map.sum(1)                # [G]
-        denom = count + (count == 0).float()
-        return (group_map @ losses) / denom, count
-
+        # compute observed counts and mean loss for each group
+        group_map = (group_idx == torch.arange(self.n_groups).unsqueeze(1).long().to(self.device)).float()
+        group_count = group_map.sum(1)
+        group_denom = group_count + (group_count == 0).float()  # avoid nans
+        group_loss = (group_map @ losses.view(-1)) / group_denom
+        return group_loss, group_count
 
     def update_exp_avg_loss(self, group_loss, group_count):
-        """
-        Update EMA only for groups that appear in this batch
-        """
-        mask = group_count > 0
-        if mask.any():
-            self.exp_avg_loss = torch.where(
-                mask,
-                self.gamma * self.exp_avg_loss + (1 - self.gamma) * group_loss,
-                self.exp_avg_loss,
-            )
+        prev_weights = (1 - self.gamma * (group_count > 0).float()) * (self.exp_avg_initialized > 0).float()
+        curr_weights = 1 - prev_weights
+        self.exp_avg_loss = self.exp_avg_loss * prev_weights + group_loss * curr_weights
+        self.exp_avg_initialized = (self.exp_avg_initialized > 0) + (group_count > 0)
+
+    def reset_stats(self):
+        self.processed_data_counts = torch.zeros(self.n_groups).to(self.device)
+        self.update_data_counts = torch.zeros(self.n_groups).to(self.device)
+        self.update_batch_counts = torch.zeros(self.n_groups).to(self.device)
+        self.avg_group_loss = torch.zeros(self.n_groups).to(self.device)
+        self.avg_per_sample_loss = 0.
+        self.avg_actual_loss = 0.
+        self.batch_count = 0.
 
     def update_stats(self, actual_loss, group_loss, group_count, weights=None):
-        """
-        Record some statistical information (optional, whether used or not)
-        """
-        # Sample-weighted avg_group_loss
+        # avg group loss
         denom = self.processed_data_counts + group_count
         denom += (denom == 0).float()
-        prev = self.processed_data_counts / denom
-        curr = group_count / denom
+        prev_weight = self.processed_data_counts / denom
+        curr_weight = group_count / denom
+        self.avg_group_loss = prev_weight * self.avg_group_loss + curr_weight * group_loss
 
-        self.avg_group_loss = prev * self.avg_group_loss + curr * group_loss
+        # batch-wise average actual loss
+        denom = self.batch_count + 1
+        self.avg_actual_loss = (self.batch_count / denom) * self.avg_actual_loss + (1 / denom) * actual_loss
 
-        # Batch-wise avg_actual_loss
-        denom_b = self.batch_count + 1
-        self.avg_actual_loss = (
-            self.batch_count / denom_b * self.avg_actual_loss +
-            1 / denom_b * actual_loss
-        )
-
-        # Sample counting
+        # counts
         self.processed_data_counts += group_count
-
-        if self.is_robust and weights is not None:
-            self.update_data_counts += group_count * (weights > 0).float()
+        if self.is_robust:
+            self.update_data_counts += group_count * ((weights > 0).float())
             self.update_batch_counts += ((group_count * weights) > 0).float()
         else:
             self.update_data_counts += group_count
             self.update_batch_counts += (group_count > 0).float()
-
         self.batch_count += 1
 
-    def reset_stats(self):
-        self.processed_data_counts = torch.zeros(self.n_groups, device=self.device)
-        self.update_data_counts = torch.zeros(self.n_groups, device=self.device)
-        self.update_batch_counts = torch.zeros(self.n_groups, device=self.device)
-        self.avg_group_loss = torch.zeros(self.n_groups, device=self.device)
-        self.avg_per_sample_loss = 0.0
-        self.avg_actual_loss = 0.0
-        self.batch_count = 0
-
-
-    def _safe_adj_over_counts(self):
-        """
-        Safe version of adj / sqrt(group_counts)
-        """
-        return self.adj / torch.sqrt(self.group_counts.clamp_min(1.0))
+        # avg per-sample quantities
+        group_frac = self.processed_data_counts / (self.processed_data_counts.sum())
+        self.avg_per_sample_loss = group_frac @ self.avg_group_loss
+    
+    def get_group_weights(self, group):
+        return self.adv_probs[group]
