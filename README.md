@@ -6,13 +6,17 @@ Paper (conference): https://openreview.net/forum?id=VmK7gYaKXl
 
 The journal extension is still being organized; updates will follow.
 
-# What’s new in the journal extension
+## Our Other Work
+
+**MILP‑X** is a unified framework that enables training and testing with just a few commands. It also inherits data generation code for various datasets, allowing users to generate data seamlessly. You can access it here: https://github.com/happypu326/MILP-X
+
+## What’s new in the journal extension
 
 - **Upgraded MoE architecture**: top-`k` routing with shared + task-specific experts; adaptive routing without additional load-balancing loss.
 - **Perturbation within Wasserstein ball**: task-embedding perturbations are constrained in a Wasserstein ball around the original embedding.
 - **Expanded synthetic datasets**: broader training coverage with more diverse MILP structures.
 
-# Environment Setup
+## Environment Setup
 
 - **Python**: 3.8.13
 - **Gurobi**: 9.5.2
@@ -25,7 +29,7 @@ To build the environment, use the provided Conda environment file:
 conda env create -f environment.yml
 ```
 
-# Project Structure
+## Project Structure
 
 The workspace is organized as follows:
 
@@ -55,17 +59,17 @@ RoME/
 └── README.md
 ```
 
-## Artifacts (Datasets / Logs )
+### Artifacts (Datasets / Logs )
 
 - **Conference-version dataset**: https://huggingface.co/datasets/tianle326/L2O-MILP
-- **Journal-extension dataset**: https://huggingface.co/datasets/tianle326/RoME
-- **Journal-extension testing logs**: https://huggingface.co/datasets/tianle326/RoME
+- **Journal-extension dataset**: https://huggingface.co/datasets/tianle326/MILP-X
+- **Journal-extension testing logs**: https://huggingface.co/datasets/tianle326/MILP-X
 
-## Datasets
+### Datasets
 
 We consider three groups of datasets:
 
-### Synthetic datasets (training)
+#### Synthetic datasets (training)
 
 RoME is trained on the following synthetic datasets:
 
@@ -79,7 +83,7 @@ RoME is trained on the following synthetic datasets:
 - **MVC**: Minimum Vertex Cover
 - **SC**: Set Cover
 
-### Synthetic datasets (testing)
+#### Synthetic datasets (testing)
 
 RoME is evaluated on the following synthetic datasets:
 
@@ -98,7 +102,7 @@ RoME is evaluated on the following synthetic datasets:
 - **PF**: Protein Folding
 - **SC**: Set Cover
 
-### Real-world datasets (testing)
+#### Real-world datasets (testing)
 
 In addition to synthetic benchmarks, we evaluate on real-world MILP datasets:
 
@@ -107,6 +111,218 @@ In addition to synthetic benchmarks, we evaluate on real-world MILP datasets:
 - **NNV**: Neural Network Verification
 - **OTS**: Optimal Transmission Switching under High Wildfire Ignition Risk
 - **SRPN**: Seismic-Resilient Pipe Network Planning
+
+## Experimental Results
+
+We report results from three evaluation settings:
+
+1. **In-domain synthetic evaluation**: comparison with baseline methods on the synthetic tasks used during training.
+2. **Out-of-domain synthetic evaluation**: comparison with Gurobi on unseen synthetic domains.
+3. **Real-world evaluation**: testing on real-world MILP benchmarks.
+
+**Improvement** are reported relative to the results obtained by running Gurobi with a 1000s time limit.
+
+**BKS** denotes the result obtained by running **Gurobi with a 3600s time limit**.
+
+### 1. In-domain synthetic evaluation (training domains)
+
+<table style="border-collapse: collapse; margin: 0 auto; text-align: center;">
+  <thead>
+    <tr>
+      <th rowspan="2" style="text-align:center; vertical-align:middle;">Method</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">BP<br>(BKS 12880.49)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">CA<br>(BKS 115461.28)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">CFLP<br>(BKS 25247.88)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">GISP<br>(BKS -4389.73)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">IP<br>(BKS 11.69)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">LB<br>(BKS 708.01)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">MIS<br>(BKS 2879.01)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">MVC<br>(BKS 214.93)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">SC<br>(BKS 395.84)</th>
+    </tr>
+    <tr>
+      <th style="text-align:center; vertical-align:middle;">Obj↑</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↑</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↑</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">Gurobi</td>
+      <td style="text-align:center; vertical-align:middle;">12280.45</td><td style="text-align:center; vertical-align:middle;">162.94s</td>
+      <td style="text-align:center; vertical-align:middle;">114782.40</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">25247.88</td><td style="text-align:center; vertical-align:middle;">148.41s</td>
+      <td style="text-align:center; vertical-align:middle;">-4122.32</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">12.00</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">708.18</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">2875.00</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">214.93</td><td style="text-align:center; vertical-align:middle;">997.16s</td>
+      <td style="text-align:center; vertical-align:middle;">395.88</td><td style="text-align:center; vertical-align:middle;">883.47s</td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">PS</td>
+      <td style="text-align:center; vertical-align:middle;">12280.47</td><td style="text-align:center; vertical-align:middle;">139.86s</td>
+      <td style="text-align:center; vertical-align:middle;">115016.28</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">25247.88</td><td style="text-align:center; vertical-align:middle;">116.35s</td>
+      <td style="text-align:center; vertical-align:middle;">-4196.74</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">11.95</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">708.13</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">2878.20</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">214.93</td><td style="text-align:center; vertical-align:middle;">984.97s</td>
+      <td style="text-align:center; vertical-align:middle;">395.87</td><td style="text-align:center; vertical-align:middle;">894.55s</td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">Apollo</td>
+      <td style="text-align:center; vertical-align:middle;">12280.47</td><td style="text-align:center; vertical-align:middle;">183.63s</td>
+      <td style="text-align:center; vertical-align:middle;">114869.22</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">25247.88</td><td style="text-align:center; vertical-align:middle;">148.02s</td>
+      <td style="text-align:center; vertical-align:middle;">-4182.65</td><td style="text-align:center; vertical-align:middle;">100.50s</td>
+      <td style="text-align:center; vertical-align:middle;">11.91</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">708.17</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">2875.60</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">214.93</td><td style="text-align:center; vertical-align:middle;">100.08s</td>
+      <td style="text-align:center; vertical-align:middle;">395.90</td><td style="text-align:center; vertical-align:middle;">922.39s</td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">CoCo</td>
+      <td style="text-align:center; vertical-align:middle;">12280.44</td><td style="text-align:center; vertical-align:middle;">132.27s</td>
+      <td style="text-align:center; vertical-align:middle;">114933.22</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">25247.88</td><td style="text-align:center; vertical-align:middle;">143.49s</td>
+      <td style="text-align:center; vertical-align:middle;">-4249.92</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">11.96</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">708.13</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">2877.86</td><td style="text-align:center; vertical-align:middle;">1000.00s</td>
+      <td style="text-align:center; vertical-align:middle;">214.93</td><td style="text-align:center; vertical-align:middle;">991.95s</td>
+      <td style="text-align:center; vertical-align:middle;">395.85</td><td style="text-align:center; vertical-align:middle;">851.77s</td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;"><b>RoME</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>12280.47</b></td><td style="text-align:center; vertical-align:middle;"><b>121.18s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>115115.18</b></td><td style="text-align:center; vertical-align:middle;"><b>1000.00s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>25247.88</b></td><td style="text-align:center; vertical-align:middle;"><b>92.66s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>-4342.84</b></td><td style="text-align:center; vertical-align:middle;"><b>1000.00s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>11.90</b></td><td style="text-align:center; vertical-align:middle;"><b>1000.00s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>708.12</b></td><td style="text-align:center; vertical-align:middle;"><b>1000.00s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>2878.43</b></td><td style="text-align:center; vertical-align:middle;"><b>1000.00s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>214.93</b></td><td style="text-align:center; vertical-align:middle;"><b>973.69s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>395.84</b></td><td style="text-align:center; vertical-align:middle;"><b>863.62s</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">Improvement</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">50%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">49.01%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">1.60x</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">82.46%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">32.25%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">85.53%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">35.29%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">1.02x</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">1.02x</td>
+    </tr>
+  </tbody>
+</table>
+
+### 2. Out-of-domain synthetic evaluation (unseen domains)
+
+<table style="border-collapse: collapse; margin: 0 auto; text-align: center;">
+  <thead>
+    <tr>
+      <th rowspan="2" style="text-align:center; vertical-align:middle;">Method</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">GC<br>(BKS 6.01)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">JS<br>(BKS 565.54)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">MC<br>(BKS 32168.48)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">NF<br>(BKS 345748.24)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">PF<br>(BKS 39.22)</th>
+    </tr>
+    <tr>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↑</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↑</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">Gurobi</td>
+      <td style="text-align:center; vertical-align:middle;">6.01</td><td style="text-align:center; vertical-align:middle;">435.12s</td>
+      <td style="text-align:center; vertical-align:middle;">566.08</td><td style="text-align:center; vertical-align:middle;">727.31s</td>
+      <td style="text-align:center; vertical-align:middle;">31817.09</td><td style="text-align:center; vertical-align:middle;">1000s</td>
+      <td style="text-align:center; vertical-align:middle;">346233.2</td><td style="text-align:center; vertical-align:middle;">991.05s</td>
+      <td style="text-align:center; vertical-align:middle;">39.17</td><td style="text-align:center; vertical-align:middle;">1000s</td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;"><b>RoME</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>6.01</b></td><td style="text-align:center; vertical-align:middle;"><b>212.61s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>565.97</b></td><td style="text-align:center; vertical-align:middle;"><b>687.60s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>31842.25</b></td><td style="text-align:center; vertical-align:middle;"><b>1000s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>346202.05</b></td><td style="text-align:center; vertical-align:middle;"><b>989.41s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>39.18</b></td><td style="text-align:center; vertical-align:middle;"><b>1000s</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">Improvement</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">2.04×</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">20.37%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">7.16%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">6.42%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">20%</td>
+    </tr>
+  </tbody>
+</table>
+
+### 3. Real-world evaluation
+
+<table style="border-collapse: collapse; margin: 0 auto; text-align: center;">
+  <thead>
+    <tr>
+      <th rowspan="2" style="text-align:center; vertical-align:middle;">Method</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">MMCN<br>(BKS 157756.18)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">MIRP<br>(BKS 37679.28)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">NNV<br>(BKS -14.14)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">OTS<br>(BKS 3.54)</th>
+      <th colspan="2" style="text-align:center; vertical-align:middle;">SRPN<br>(BKS 51398198.76)</th>
+    </tr>
+    <tr>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↑</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+      <th style="text-align:center; vertical-align:middle;">Obj↓</th><th style="text-align:center; vertical-align:middle;">Time↓</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">Gurobi</td>
+      <td style="text-align:center; vertical-align:middle;">157840.92</td><td style="text-align:center; vertical-align:middle;">1000s</td>
+      <td style="text-align:center; vertical-align:middle;">39672.12</td><td style="text-align:center; vertical-align:middle;">783.25s</td>
+      <td style="text-align:center; vertical-align:middle;">-14.14</td><td style="text-align:center; vertical-align:middle;">7.64s</td>
+      <td style="text-align:center; vertical-align:middle;">3.54</td><td style="text-align:center; vertical-align:middle;">87.85s</td>
+      <td style="text-align:center; vertical-align:middle;">51411108.55</td><td style="text-align:center; vertical-align:middle;">1000s</td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;"><b>RoME</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>157823.80</b></td><td style="text-align:center; vertical-align:middle;"><b>998.77s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>38977.55</b></td><td style="text-align:center; vertical-align:middle;"><b>801.31s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>-14.14</b></td><td style="text-align:center; vertical-align:middle;"><b>7.08s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>3.54</b></td><td style="text-align:center; vertical-align:middle;"><b>60.40s</b></td>
+      <td style="text-align:center; vertical-align:middle;"><b>51402212.08</b></td><td style="text-align:center; vertical-align:middle;"><b>1000.00s</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:center; vertical-align:middle;">Improvement</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">20.20%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">34.85%</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">1.07×</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">1.45×</td>
+      <td colspan="2" style="text-align:center; vertical-align:middle;">68.91%</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Usage
 
@@ -198,6 +414,3 @@ If you find RoME useful or relevant to your research, please consider citing our
 }
 ```
 
-# Our Related Work
-
-**MILP‑X** is a unified framework that enables training and testing with just a few commands. It also inherits data generation code for various datasets, allowing users to generate data seamlessly. You can access it here: https://github.com/happypu326/MILP-X
