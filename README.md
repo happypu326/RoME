@@ -198,6 +198,6 @@ If you find RoME useful or relevant to your research, please consider citing our
 }
 ```
 
-# Our Other Work
+# Our Related Work
 
 **MILP‑X** is a unified framework that enables training and testing with just a few commands. It also inherits data generation code for various datasets, allowing users to generate data seamlessly. You can access it here: https://github.com/happypu326/MILP-X
